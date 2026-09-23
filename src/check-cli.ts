@@ -1,4 +1,4 @@
-import { connectWithRetry, pool } from './db/client';
+import { connectWithRetry, appPool as pool } from './db/client';
 import { checkArrivals, describeArrivals, exitCodeFor } from './audit/check-arrivals';
 
 async function main(): Promise<void> {

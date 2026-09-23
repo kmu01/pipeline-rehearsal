@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readManifest } from './audit/manifest';
-import { pool } from './db/client';
+import { appPool } from './db/client';
 import { loadFile } from './ingest/load-file';
 
 async function main() {
@@ -16,7 +16,7 @@ async function main() {
     const result = await loadFile({ tenantId: batch.tenant, source: batch.source, fileId: batch.path, absolutePath });
     console.log(result, batch.path);
   }
-  await pool.end();
+  await appPool.end();
 }
 
 main();

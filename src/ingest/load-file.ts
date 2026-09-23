@@ -1,9 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { parse } from 'csv-parse/sync';
-import type { PoolClient } from 'pg';
 import type { SourceType } from '../config/loader';
-import { pool } from '../db/client';
+import { withTenant } from '../db/client';
 
 export interface FileToLoad {
   tenantId: string;
@@ -28,22 +27,20 @@ export async function loadFile(file: FileToLoad, crashAfterRows?: number): Promi
   const bytes = fs.readFileSync(file.absolutePath);
   const fileHash = crypto.createHash('sha256').update(bytes).digest('hex');
 
-  // pool.connect() gives us ONE connection to hold for the whole file. Every query below runs on
-  // it, so BEGIN/COMMIT/ROLLBACK all apply to the same session.
-  const client: PoolClient = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
+  // withTenant opens ONE connection, tells Postgres which tenant this transaction may touch, and
+  // runs everything below inside that one transaction. Row-level security (step 7's migration)
+  // then makes it IMPOSSIBLE for any query in here to read or write another tenant's rows, even by
+  // mistake -- not because our code remembers to filter, but because the database refuses to.
+  return withTenant(file.tenantId, async (client) => {
     // Decide what to do BEFORE parsing or inserting anything. This is the replay-safety check:
-    // ask the ledger what it already knows about this file_id, for THIS tenant.
-    const prior = (await client.query(`SELECT file_hash FROM file_ledger WHERE tenant_id = $1 AND file_id = $2`, [file.tenantId, file.fileId])).rows[0] as
+    // ask the ledger what it already knows about this file_id.
+    const prior = (await client.query(`SELECT file_hash FROM file_ledger WHERE file_id = $1`, [file.fileId])).rows[0] as
       | { file_hash: string }
       | undefined;
 
     if (prior) {
-      await client.query('ROLLBACK');
       if (prior.file_hash === fileHash) {
-        return { outcome: 'ALREADY_LOADED' }; 
+        return { outcome: 'ALREADY_LOADED' }; // same file, seen before: re-running is a no-op, not a re-load
       }
       // Same file_id, different bytes. NOT a replay, could be a correction or a mistake.
       // A human should look, so we refuse instead of guessing.
@@ -72,12 +69,6 @@ export async function loadFile(file: FileToLoad, crashAfterRows?: number): Promi
       }
     }
 
-    await client.query('COMMIT');
     return { outcome: 'LOADED', rows: records.length };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release(); 
-  }
+  });
 }
