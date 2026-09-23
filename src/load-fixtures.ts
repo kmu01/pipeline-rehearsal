@@ -1,22 +1,29 @@
-// One-off script for trying the manifest check by hand. Not part of the pipeline, but useful for debugging.
 import fs from 'node:fs';
 import path from 'node:path';
 import { readManifest } from './audit/manifest';
-import { appPool } from './db/client';
+import { connectWithRetry, appPool } from './db/client';
 import { loadFile } from './ingest/load-file';
 
 async function main() {
   const root = process.argv[2] ?? './fixtures';
-  for (const batch of readManifest(root)) {
-    const absolutePath = path.resolve(root, batch.path);
-    if (!fs.existsSync(absolutePath)) {
-      console.log('skip (not on disk):', batch.path);
-      continue;
+  await connectWithRetry(appPool);
+  const batches = readManifest(root);
+  let loaded = 0, skipped = 0, missing = 0, refused = 0, failed = 0;
+  for (const b of batches) {
+    const abs = path.resolve(root, b.path);
+    if (!fs.existsSync(abs)) { console.log('MISSING  ', b.path); missing++; continue; }
+    try {
+      const r = await loadFile({ tenantId: b.tenant, source: b.source, fileId: b.path, absolutePath: abs });
+      console.log(r.outcome.padEnd(22), b.path, 'rows' in r ? `(${r.rows} rows)` : '');
+      if (r.outcome === 'LOADED') loaded++;
+      else if (r.outcome === 'ALREADY_LOADED') skipped++;
+      else if (r.outcome === 'REFUSED_CHANGED_FILE') refused++;
+    } catch (err) {
+      console.log('FAILED   '.padEnd(22), b.path, '->', (err as Error).message.split('\n')[0]);
+      failed++;
     }
-    const result = await loadFile({ tenantId: batch.tenant, source: batch.source, fileId: batch.path, absolutePath });
-    console.log(result, batch.path);
   }
+  console.log(`\n${batches.length} expected: ${loaded} loaded, ${skipped} already loaded, ${missing} missing, ${refused} refused, ${failed} failed to parse`);
   await appPool.end();
 }
-
 main();
