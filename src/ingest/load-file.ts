@@ -8,11 +8,14 @@ import { pool } from '../db/client';
 export interface FileToLoad {
   tenantId: string;
   source: SourceType;
-  fileId: string; // the file's path, used as its identity in the ledger
+  fileId: string; // the file's path, used as its identity in the ledger (see step 5)
   absolutePath: string; // where to actually read the bytes from
 }
 
-export type LoadResult = { outcome: 'LOADED'; rows: number } | { outcome: 'ALREADY_LOADED' };
+export type LoadResult =
+  | { outcome: 'LOADED'; rows: number }
+  | { outcome: 'ALREADY_LOADED' }
+  | { outcome: 'REFUSED_CHANGED_FILE'; message: string };
 
 /** Thrown on purpose to prove that a crash mid-file leaves nothing behind. Not a real error case. */
 export class SimulatedCrash extends Error {}
@@ -24,15 +27,35 @@ export class SimulatedCrash extends Error {}
 export async function loadFile(file: FileToLoad, crashAfterRows?: number): Promise<LoadResult> {
   const bytes = fs.readFileSync(file.absolutePath);
   const fileHash = crypto.createHash('sha256').update(bytes).digest('hex');
-  const records: Record<string, string>[] = parse(bytes, { columns: true, skip_empty_lines: true });
 
   // pool.connect() gives us ONE connection to hold for the whole file. Every query below runs on
-  // it, so BEGIN/COMMIT/ROLLBACK all apply to the same session. 
+  // it, so BEGIN/COMMIT/ROLLBACK all apply to the same session.
   const client: PoolClient = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Written FIRST: raw_records' foreign key requires this row to already exist.
+    // Decide what to do BEFORE parsing or inserting anything. This is the replay-safety check:
+    // ask the ledger what it already knows about this file_id, for THIS tenant.
+    const prior = (await client.query(`SELECT file_hash FROM file_ledger WHERE tenant_id = $1 AND file_id = $2`, [file.tenantId, file.fileId])).rows[0] as
+      | { file_hash: string }
+      | undefined;
+
+    if (prior) {
+      await client.query('ROLLBACK');
+      if (prior.file_hash === fileHash) {
+        return { outcome: 'ALREADY_LOADED' }; 
+      }
+      // Same file_id, different bytes. NOT a replay, could be a correction or a mistake.
+      // A human should look, so we refuse instead of guessing.
+      return {
+        outcome: 'REFUSED_CHANGED_FILE',
+        message: `${file.fileId} was already loaded with different content (recorded hash ${prior.file_hash.slice(0, 12)}, this file's hash is ${fileHash.slice(0, 12)}). Investigate before re-running.`,
+      };
+    }
+
+    const records: Record<string, string>[] = parse(bytes, { columns: true, skip_empty_lines: true });
+
+    // Written FIRST: raw_records' foreign key requires this row to already exist (step 2).
     await client.query(
       `INSERT INTO file_ledger (tenant_id, file_id, source, file_hash, row_count) VALUES ($1, $2, $3, $4, $5)`,
       [file.tenantId, file.fileId, file.source, fileHash, records.length],
@@ -55,6 +78,6 @@ export async function loadFile(file: FileToLoad, crashAfterRows?: number): Promi
     await client.query('ROLLBACK');
     throw err;
   } finally {
-    client.release();
+    client.release(); 
   }
 }
