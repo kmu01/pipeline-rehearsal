@@ -5,7 +5,8 @@
   "scripts": {
     "test": "vitest run",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "migrate": "tsx src/migrate-cli.ts"
   },
   "type": "module",
   "private": "true",
