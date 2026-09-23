@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { checkArrivals, describeArrivals, exitCodeFor } from '../src/audit/check-arrivals';
-import { pool } from '../src/db/client';
+import { adminPool as pool } from '../src/db/client';
 import { migrate } from '../src/db/migrate';
 import { loadFile } from '../src/ingest/load-file';
 

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { pool } from '../src/db/client';
+import { adminPool as pool } from '../src/db/client';
 import { migrate } from '../src/db/migrate';
 
 // Needs the database running (`podman compose up -d`). Uses throwaway tenants named sch_test_*.

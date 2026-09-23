@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
-import { connectWithRetry, pool } from '../src/db/client';
+import { connectWithRetry, adminPool as pool } from '../src/db/client';
 
 // These tests need the database to be running: `podman compose up -d`.
 afterAll(async () => {
