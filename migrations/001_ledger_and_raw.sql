@@ -2,8 +2,6 @@
 -- Every table has tenant_id, and it is the FIRST column of every key. That is what stops two clients
 -- from colliding when they happen to use the same file name or the same id.
 
--- One row per file that was loaded completely. Written in the SAME transaction as the file's rows
--- (step 4), so a row here means "this whole file is in the database". Never "part of it".
 CREATE TABLE file_ledger (
     tenant_id   text        NOT NULL,
     file_id     text        NOT NULL,             -- the file's path, relative to the fixtures folder
