@@ -8,9 +8,9 @@ export interface ArrivalReport {
 
 /**
  * For every batch the manifest promises: has it actually been loaded? "Loaded" means there is a
- * file_ledger row for it, which only exists once loadFile has committed (step 4).
+ * file_ledger row for it, which only exists once loadFile has committed.
  *
- * Because row-level security (step 7) only lets a query see ONE tenant's rows at a time, this
+ * Because row-level security only lets a query see ONE tenant's rows at a time, this
  * groups the manifest by tenant and asks the question once per tenant, each time inside
  * withTenant. There is no single query that can see every tenant's ledger rows at once -- and
  * that is the point: the same rule that protects a client's data from a coding mistake also

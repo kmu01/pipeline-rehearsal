@@ -7,7 +7,7 @@ import { withTenant } from '../db/client';
 export interface FileToLoad {
   tenantId: string;
   source: SourceType;
-  fileId: string; // the file's path, used as its identity in the ledger (see step 5)
+  fileId: string; // the file's path, used as its identity in the ledger.
   absolutePath: string; // where to actually read the bytes from
 }
 
@@ -28,7 +28,7 @@ export async function loadFile(file: FileToLoad, crashAfterRows?: number): Promi
   const fileHash = crypto.createHash('sha256').update(bytes).digest('hex');
 
   // withTenant opens ONE connection, tells Postgres which tenant this transaction may touch, and
-  // runs everything below inside that one transaction. Row-level security (step 7's migration)
+  // runs everything below inside that one transaction. Row-level security
   // then makes it IMPOSSIBLE for any query in here to read or write another tenant's rows, even by
   // mistake -- not because our code remembers to filter, but because the database refuses to.
   return withTenant(file.tenantId, async (client) => {
@@ -52,7 +52,7 @@ export async function loadFile(file: FileToLoad, crashAfterRows?: number): Promi
 
     const records: Record<string, string>[] = parse(bytes, { columns: true, skip_empty_lines: true });
 
-    // Written FIRST: raw_records' foreign key requires this row to already exist (step 2).
+    // Written FIRST: raw_records' foreign key requires this row to already exist.
     await client.query(
       `INSERT INTO file_ledger (tenant_id, file_id, source, file_hash, row_count) VALUES ($1, $2, $3, $4, $5)`,
       [file.tenantId, file.fileId, file.source, fileHash, records.length],

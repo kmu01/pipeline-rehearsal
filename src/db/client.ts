@@ -11,7 +11,7 @@ export const adminPool = new Pool({ connectionString: ADMIN_URL, connectionTimeo
 
 /**
  * The connection every part of the program that touches tenant data uses. This role has row-level
- * security enforced against it (step 7's migration sets that up), so a query on this pool with no
+ * security enforced against it, so a query on this pool with no
  * tenant selected sees nothing, and a query scoped to tenant A cannot see tenant B's rows.
  */
 export const appPool = new Pool({ connectionString: APP_URL, connectionTimeoutMillis: 3000 });
@@ -23,7 +23,7 @@ export interface RetryOptions {
   delayMs?: number;
 }
 
-/** Wait until a pool's target accepts connections. See step 1 for why this is needed. */
+/** Wait until a pool's target accepts connections. */
 export async function connectWithRetry(p: Pool, { maxAttempts = 15, delayMs = 1000 }: RetryOptions = {}): Promise<void> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {

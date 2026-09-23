@@ -1,5 +1,5 @@
 -- 002_row_level_security.sql
--- Composite keys (step 2) stop two tenants' DATA from colliding. They do nothing to stop a QUERY
+-- Composite keys stop two tenants' DATA from colliding. They do nothing to stop a QUERY
 -- that forgets "WHERE tenant_id = ..." from reading every tenant's rows. This migration closes
 -- that gap at the database level, so a forgetful query gets an empty or restricted result instead
 -- of someone else's data -- no matter what the application code does or forgets to do.

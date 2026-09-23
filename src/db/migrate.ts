@@ -44,8 +44,8 @@ export async function migrate(dir: string = MIGRATIONS_DIR): Promise<string[]> {
 
     // Grants run every time, not just on first create, so a table added by a LATER migration is
     // still reachable by the app role without a separate manual step.
-    await client.query(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`);
-    await client.query(`GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`);
+    await client.query(`GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`);
+    await client.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE}`);
     return applied;
   } finally {
     await client.query('SELECT pg_advisory_unlock($1)', [LOCK_ID]).catch(() => undefined);
