@@ -6,7 +6,8 @@
     "test": "vitest run",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "migrate": "tsx src/migrate-cli.ts"
+    "migrate": "tsx src/migrate-cli.ts",
+    "check": "tsx src/check-cli.ts"
   },
   "type": "module",
   "private": "true",
