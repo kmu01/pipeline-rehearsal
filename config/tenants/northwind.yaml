@@ -1,0 +1,13 @@
+id: northwind
+name: Northwind
+sources:
+  orders:
+    columns: [order_id, created_at, channel, gross, currency, customer_email]
+  refunds:
+    columns: [refund_id, refunded_at, order_id, amount, currency]
+  email_events:
+    columns: [event_id, type, email, campaign_id, occurred_at]
+  ad_spend:
+    columns: [date, campaign_id, platform, spend]
+    aliases:
+      spend: [cost_usd]
