@@ -20,6 +20,7 @@ function writeOrders(rowCount: number): string {
 
 const rawCount = async () => (await pool.query('SELECT count(*)::int AS n FROM raw_records WHERE tenant_id = $1', [TENANT])).rows[0].n as number;
 const ledgerCount = async () => (await pool.query('SELECT count(*)::int AS n FROM file_ledger WHERE tenant_id = $1', [TENANT])).rows[0].n as number;
+const ORDERS_CONFIG = { columns: ['order_id', 'created_at', 'channel', 'gross', 'currency', 'customer_email'], aliases: {} };
 
 beforeAll(async () => {
   await migrate();
@@ -38,7 +39,7 @@ afterAll(async () => {
 describe('loadFile', () => {
   it('loads every row and one ledger row for a normal file', async () => {
     const file = writeOrders(3);
-    const result = await loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file });
+    const result = await loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file });
     expect(result).toEqual({ outcome: 'LOADED', rows: 3 });
     expect(await rawCount()).toBe(3);
     expect(await ledgerCount()).toBe(1);
@@ -47,7 +48,7 @@ describe('loadFile', () => {
   it('THE central guarantee: a crash part way through leaves NOTHING behind', async () => {
     const file = writeOrders(10);
     await expect(
-      loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file }, 6), // crash after row 6 of 10
+      loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file }, 6), // crash after row 6 of 10
     ).rejects.toThrow(SimulatedCrash);
 
     expect(await rawCount()).toBe(0);
@@ -56,9 +57,9 @@ describe('loadFile', () => {
 
   it('after a crash, loading the SAME file again succeeds and inserts every row exactly once', async () => {
     const file = writeOrders(10);
-    await expect(loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file }, 6)).rejects.toThrow(SimulatedCrash);
+    await expect(loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file }, 6)).rejects.toThrow(SimulatedCrash);
 
-    const result = await loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file });
+    const result = await loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file });
     expect(result).toEqual({ outcome: 'LOADED', rows: 10 });
     expect(await rawCount()).toBe(10); // not 16: nothing from the crashed attempt should have survived to double up.
     expect(await ledgerCount()).toBe(1);
@@ -68,10 +69,10 @@ describe('loadFile', () => {
 describe('loadFile: replay safety', () => {
   it('loading the same file a second time is a no-op, not a re-load', async () => {
     const file = writeOrders(3);
-    const first = await loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file });
+    const first = await loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file });
     expect(first).toEqual({ outcome: 'LOADED', rows: 3 });
 
-    const second = await loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file });
+    const second = await loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file });
     expect(second).toEqual({ outcome: 'ALREADY_LOADED' });
     expect(await rawCount()).toBe(3); // still 3, not 6
     expect(await ledgerCount()).toBe(1);
@@ -79,10 +80,10 @@ describe('loadFile: replay safety', () => {
 
   it('the SAME file_id with DIFFERENT bytes is refused, not silently reloaded', async () => {
     const file = writeOrders(3);
-    await loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file });
+    await loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file });
 
     const changedFile = writeOrders(5); // a different file, same path we will claim as the SAME file_id
-    const result = await loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: changedFile });
+    const result = await loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: changedFile });
 
     expect(result.outcome).toBe('REFUSED_CHANGED_FILE');
     expect(await rawCount()).toBe(3); // unchanged: the 5-row version never got in
@@ -94,8 +95,8 @@ describe('loadFile: replay safety', () => {
     await pool.query('DELETE FROM file_ledger WHERE tenant_id = $1', [OTHER_TENANT]);
 
     const file = writeOrders(3);
-    await loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file });
-    const otherResult = await loadFile({ tenantId: OTHER_TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file });
+    await loadFile({ tenantId: OTHER_TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file });
+    const otherResult = await loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file });
 
     expect(otherResult).toEqual({ outcome: 'LOADED', rows: 3 }); // NOT "already loaded": that was a different tenant
     await pool.query('DELETE FROM raw_records WHERE tenant_id = $1', [OTHER_TENANT]);
@@ -104,7 +105,7 @@ describe('loadFile: replay safety', () => {
 
   it('a crash still leaves nothing behind, even with the replay check in place', async () => {
     const file = writeOrders(10);
-    await expect(loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: file }, 6)).rejects.toThrow(SimulatedCrash);
+    await expect(loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: file }, 6)).rejects.toThrow(SimulatedCrash);
     expect(await rawCount()).toBe(0);
     expect(await ledgerCount()).toBe(0);
   });

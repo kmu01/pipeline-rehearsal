@@ -21,6 +21,8 @@ function csv(relPath: string): string {
   return abs;
 }
 
+const ORDERS_CONFIG = { columns: ['order_id', 'created_at', 'channel', 'gross', 'currency', 'customer_email'], aliases: {} };
+
 beforeAll(async () => {
   await migrate();
 });
@@ -48,7 +50,7 @@ describe('checkArrivals', () => {
   it('a batch that WAS loaded is ARRIVED', async () => {
     const abs = csv('orders/batch_01.csv');
     const root = manifest([{ tenant: TENANT, source: 'orders', batch: 1, path: 'orders/batch_01.csv' }]);
-    await loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: abs });
+    await loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: abs });
 
     const reports = await checkArrivals(root);
     expect(reports[0]!.status).toBe('ARRIVED');
@@ -62,7 +64,7 @@ describe('checkArrivals', () => {
       { tenant: TENANT, source: 'orders', batch: 1, path: 'orders/batch_01.csv' },
       { tenant: TENANT, source: 'orders', batch: 2, path: 'orders/batch_02.csv' },
     ]);
-    await loadFile({ tenantId: TENANT, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: abs1 });
+    await loadFile({ tenantId: TENANT, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: abs1 });
 
     const reports = await checkArrivals(root);
     const lines = describeArrivals(reports);
@@ -77,7 +79,7 @@ describe('checkArrivals', () => {
     await pool.query('DELETE FROM file_ledger WHERE tenant_id = $1', [OTHER]);
     const abs = csv('orders/batch_01.csv');
     const root = manifest([{ tenant: TENANT, source: 'orders', batch: 1, path: 'orders/batch_01.csv' }]);
-    await loadFile({ tenantId: OTHER, source: 'orders', fileId: 'orders/batch_01.csv', absolutePath: abs }); // wrong tenant
+    await loadFile({ tenantId: OTHER, source: 'orders', sourceConfig: ORDERS_CONFIG, fileId: 'orders/batch_01.csv', absolutePath: abs }); // wrong tenant
 
     const reports = await checkArrivals(root);
     expect(reports[0]!.status).toBe('MISSING');
